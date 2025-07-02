@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>日月潭水庫水位與九蛙</title> 
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 20px;
+    text-align: center;
+    color: #333;
+    
+    /* 新增背景圖片 */
+    background-color: #e0f2f7; /* 淡藍色背景，作為圖片未載入時的備用或底色 */
+    background-image: url('http://googleusercontent.com/image_generation_content/0'), url('http://googleusercontent.com/image_generation_content/1'); /* 水庫圖在前，青蛙圖在後 */
+    background-repeat: no-repeat, repeat-x; /* 水庫圖不重複，青蛙圖在X軸重複 */
+    background-position: center center, bottom center; /* 水庫圖居中，青蛙圖在底部居中 */
+    background-size: 80% auto, 100px auto; /* 水庫圖佔80%寬度，青蛙圖寬度100px */
+    background-attachment: fixed, scroll; /* 水庫圖固定，青蛙圖隨滾動 */
+  }
+  h1 {
+    color: #004080; /* 更深的藍色標題 */
+    margin-bottom: 30px;
+  }
+  label {
+    font-size: 1.1em;
+    margin-bottom: 10px;
+    display: block;
+  }
+  input[type="number"] {
+    padding: 10px 15px;
+    margin-bottom: 25px;
+    width: calc(100% - 40px);
+    max-width: 280px; /* 稍微加大輸入框 */
+    font-size: 1.1em;
+    border: 1px solid #90caf9; /* 淺藍色邊框 */
+    border-radius: 5px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    transition: border-color 0.3s;
+  }
+  input[type="number"]:focus {
+    border-color: #007bff;
+    outline: none;
+  }
+  p {
+    font-size: 1.2em;
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  #result {
+    font-size: 1.6em; /* 稍微放大結果文字 */
+    font-weight: bold;
+    padding: 10px 20px;
+    border-radius: 8px; /* 圓角更大 */
+    display: inline-block;
+    min-width: 200px; /* 確保結果區域足夠寬 */
+    background-color: #ffffff; /* 白色背景 */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* 增加陰影效果 */
+  }
+
+  /* 根據水位調整顏色：深藍 -> 淺藍 -> 淺綠 -> 深綠 */
+  /* 水位越高 (青蛙越少)，顏色越深藍 */
+  /* 水位越低 (青蛙越多)，顏色越深綠 */
+  .zone-exceed { color: #A52A2A; font-weight: bold; } /* 超過滿水位：咖啡紅色，表示警戒 */
+  .zone-full { color: #000080; } /* 滿水位：非常深藍 (接近海軍藍) */
+  .zone-one { color: #0000B2; } /* 深藍 */
+  .zone-two { color: #0000CD; } /* 中藍 */
+  .zone-three { color: #0000FF; } /* 純藍 */
+  .zone-four { color: #4169E1; } /* 寶藍 */
+  .zone-five { color: #87CEFA; } /* 淺藍 (天藍) */
+  .zone-six { color: #98FB98; } /* 淺綠 (淡綠) */
+  .zone-seven { color: #7CFC00; } /* 綠黃色 (草綠) */
+  .zone-eight { color: #32CD32; } /* 鮮綠 */
+  .zone-nine { color: #008000; } /* 第9隻青蛙：深綠 (森林綠) */
+  .zone-dead-water { color: #4B0082; background-color: #f0f0f0; } /* 呆水位：深紫色，表示重要狀態 */
+  .zone-below-dead { color: #8B4513; font-weight: bold; } /* 低於呆水位：土棕色，表示缺水嚴重 */
+  .invalid { color: #757575; } /* 灰色，錯誤或無效輸入 */
+</style>
+</head>
+<body>
+
+  <h1>日月潭水庫水位與九蛙</h1> 
+<label for="waterLevelInput">請輸入水庫即時水位 (單位：公尺):</label>
+  <input type="number" id="waterLevelInput" placeholder="例如: 748.25" step="0.01">
+
+  <p>目前狀態: <span id="result">---</span></p>
+
+  <script>
+    const waterLevelInput = document.getElementById('waterLevelInput');
+    const resultSpan = document.getElementById('result');
+
+    // 定義水位區間及其對應的青蛙露出訊息和樣式類別
+    // 重要的是：區間必須從高水位到低水位**依次**排序，這樣判斷邏輯才能正確執行
+    const waterLevelFrogZones = [
+      // 水位748.48公尺以上顯示「超過滿水位高程」
+      { min: 748.48001, max: Infinity, message: '超過滿水位高程', className: 'zone-exceed' }, 
+      // 精確滿水位748.48公尺顯示「滿水位，無青蛙露出水面」
+      { min: 748.48, max: 748.48, message: '滿水位，無青蛙露出水面', className: 'zone-full' },
+      // 水位748.31公尺到748.47公尺顯示第1隻青蛙露出水面
+      { min: 748.31, max: 748.47, message: '第1隻青蛙露出水面', className: 'zone-one' },
+      // 水位748.14公尺到748.30公尺顯示第2隻青蛙露出水面
+      { min: 748.14, max: 748.30, message: '第2隻青蛙露出水面', className: 'zone-two' },
+      // 水位747.81公尺到748.13公尺顯示第3隻青蛙露出水面
+      { min: 747.81, max: 748.13, message: '第3隻青蛙露出水面', className: 'zone-three' },
+      // 水位747.51公尺到747.80公尺顯示第4隻青蛙露出水面
+      { min: 747.51, max: 747.80, message: '第4隻青蛙露出水面', className: 'zone-four' },
+      // 水位747.16公尺到747.50公尺顯示第5隻青蛙露出水面
+      { min: 747.16, max: 747.50, message: '第5隻青蛙露出水面', className: 'zone-five' },
+      // 水位746.82公尺到747.15公尺顯示第6隻青蛙露出水面
+      { min: 746.82, max: 747.15, message: '第6隻青蛙露出水面', className: 'zone-six' },
+      // 水位746.38公尺到746.81公尺顯示第7隻青蛙露出水面
+      { min: 746.38, max: 746.81, message: '第7隻青蛙露出水面', className: 'zone-seven' },
+      // 水位745.90公尺到746.37公尺顯示第8隻青蛙露出水面
+      { min: 745.90, max: 746.37, message: '第8隻青蛙露出水面', className: 'zone-eight' },
+      // 水位727.28公尺到745.89公尺顯示第9隻青蛙露出水面
+      { min: 727.28, max: 745.89, message: '第9隻青蛙露出水面', className: 'zone-nine' },
+      // 精確呆水位727.27公尺顯示「呆水位，全部青蛙露出水面」
+      { min: 727.27, max: 727.27, message: '呆水位，全部青蛙露出水面', className: 'zone-dead-water' },
+      // 水位727.27公尺以下顯示「低於呆水位高程」
+      { min: -Infinity, max: 727.26999, message: '低於呆水位高程', className: 'zone-below-dead' }
+    ];
+
+    function checkWaterLevelAndFrogs() {
+      const waterLevel = parseFloat(waterLevelInput.value);
+
+      let message = '';
+      let className = '';
+
+      // 檢查是否為有效數字
+      if (isNaN(waterLevel)) {
+        message = '請輸入有效的水位數值';
+        className = 'invalid';
+      } else {
+        // 遍歷區間，找到符合的水位範圍
+        // 由於 waterLevelFrogZones 是從高水位到低水位排序的，我們找到第一個符合的區間即可
+        for (const zone of waterLevelFrogZones) {
+          // 判斷水位是否在當前區間的 min 和 max 之間 (包含 min 和 max)
+          // 這裡的邏輯考慮了開放區間 (例如 max: Infinity 或 min: -Infinity)
+          if (waterLevel >= zone.min && waterLevel <= zone.max) {
+            message = zone.message;
+            className = zone.className;
+            break; // 找到匹配的區間後就跳出迴圈
+          }
+        }
+        // 如果水位不在任何已知區間內，理論上不應該發生如果區間定義完整
+        if (!message) {
+            message = '未知的狀態 (請檢查水位定義)';
+            className = 'invalid';
+        }
+      }
+
+      resultSpan.textContent = message;
+      resultSpan.className = className;
+    }
+
+    // 監聽輸入框的 `input` 事件，即時更新
+    waterLevelInput.addEventListener('input', checkWaterLevelAndFrogs);
+
+    // 頁面載入時執行一次，處理初始狀態
+    window.onload = () => {
+      if (waterLevelInput.value) {
+        checkWaterLevelAndFrogs();
+      } else {
+        resultSpan.textContent = '---'; // 初始顯示
+        resultSpan.className = '';
+      }
+    };
+  </script>
+
+</body>
+</html>
